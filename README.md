@@ -1,0 +1,50 @@
+# Snake Arena Remix
+
+## Description
+Snake Arena Remix modernizes snake gameplay with hazard cells, temporary speed boosts, and progression-based pacing.
+
+## Features
+- Grid-based snake core loop
+- Hazard and boost entities
+- Food scoring and level progression
+- Dynamic speed adjustments based on level/boosts
+- Pause/resume flow and restart overlay
+- Unit-tested snake engine
+- Static Vercel-ready deployment setup
+
+## Run
+```bash
+cd snake-arena-remix
+npm run dev
+```
+Open `http://127.0.0.1:8108/snake-arena-remix/index.html`.
+
+## Test
+```bash
+cd snake-arena-remix
+npm test
+```
+
+## Deploy
+```bash
+cd snake-arena-remix
+npx vercel --prod
+```
+
+## Inspiration
+- https://github.com/CodeExplainedRepo/Snake-JavaScript
+
+## Structure
+```text
+snake-arena-remix/
+  index.html
+  styles.css
+  app.js
+  src/
+    snakeEngine.js
+  tests/
+    snakeEngine.test.js
+  package.json
+  vercel.json
+  README.md
+```

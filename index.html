@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Snake Arena Remix</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <p class="kicker">Snake Reimagined</p>
+        <h1>Snake Arena Remix</h1>
+        <p>Classic snake with hazards, speed boosts, and scoring multipliers.</p>
+      </header>
+
+      <section class="layout">
+        <div class="board-wrap">
+          <canvas id="board" width="720" height="480" aria-label="snake arena"></canvas>
+          <div id="overlay" class="overlay" hidden>
+            <h2>Game Over</h2>
+            <button id="restartBtn" type="button">Restart</button>
+          </div>
+        </div>
+
+        <aside class="panel">
+          <button id="startBtn" type="button">Start</button>
+          <button id="pauseBtn" type="button" disabled>Pause</button>
+
+          <div class="stats">
+            <p>Score <strong id="score">0</strong></p>
+            <p>Length <strong id="length">3</strong></p>
+            <p>Level <strong id="level">1</strong></p>
+            <p>Boost <strong id="boost">none</strong></p>
+          </div>
+
+          <p class="meta">Controls: <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> or arrow keys.</p>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
