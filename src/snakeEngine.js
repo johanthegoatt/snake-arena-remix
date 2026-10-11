@@ -9,27 +9,48 @@ function samePoint(a, b) {
   return a.x === b.x && a.y === b.y;
 }
 
-function randomCell(width, height, randomFn = Math.random) {
-  return {
-    x: Math.floor(randomFn() * width),
-    y: Math.floor(randomFn() * height),
-  };
+const OPPOSITES = {
+  up: "down",
+  down: "up",
+  left: "right",
+  right: "left",
+};
+
+// Turns pressed faster than one tick are kept in order, up to this many.
+export const MAX_QUEUED_TURNS = 2;
+export const FOODS_PER_LEVEL = 5;
+export const FOODS_PER_BOOST = 4;
+// New hazards never land this close (in moves) to the snake's head.
+export const HAZARD_SAFE_DISTANCE = 3;
+
+function isBlocked(state, cell) {
+  return (
+    state.snake.some((part) => samePoint(part, cell)) ||
+    state.hazards.some((hazard) => samePoint(hazard, cell)) ||
+    state.boosts.some((boost) => samePoint(boost, cell)) ||
+    (state.food ? samePoint(state.food, cell) : false)
+  );
 }
 
-function randomFreeCell(state, randomFn = Math.random) {
-  for (let attempt = 0; attempt < 1000; attempt += 1) {
-    const cell = randomCell(state.width, state.height, randomFn);
-    const blocked =
-      state.snake.some((part) => samePoint(part, cell)) ||
-      state.hazards.some((hazard) => samePoint(hazard, cell)) ||
-      state.boosts.some((boost) => samePoint(boost, cell));
-
-    if (!blocked) {
-      return cell;
+// Picks uniformly from every free cell, so it never lands on the snake even
+// when the board is nearly full. Returns null when nothing is free.
+export function randomFreeCell(state, randomFn = Math.random, minDistanceFromHead = 0) {
+  const head = state.snake[0];
+  const free = [];
+  for (let y = 0; y < state.height; y += 1) {
+    for (let x = 0; x < state.width; x += 1) {
+      const cell = { x, y };
+      if (isBlocked(state, cell)) continue;
+      if (head && Math.abs(head.x - x) + Math.abs(head.y - y) < minDistanceFromHead) continue;
+      free.push(cell);
     }
   }
 
-  return { x: 0, y: 0 };
+  if (free.length === 0) {
+    return null;
+  }
+
+  return free[Math.min(free.length - 1, Math.floor(randomFn() * free.length))];
 }
 
 export function createInitialState({ width = 24, height = 16 } = {}, randomFn = Math.random) {
@@ -45,40 +66,46 @@ export function createInitialState({ width = 24, height = 16 } = {}, randomFn = 
     snake,
     direction: "right",
     pendingDirection: "right",
-    food: { x: 3, y: 3 },
+    turnQueue: [],
+    food: null,
     hazards: [],
     boosts: [],
     score: 0,
+    foodsEaten: 0,
     level: 1,
     alive: true,
+    won: false,
     steps: 0,
     tickMs: 170,
     boostStepsLeft: 0,
   };
 
   base.food = randomFreeCell(base, randomFn);
-  base.hazards = [randomFreeCell(base, randomFn)];
+  base.hazards = [randomFreeCell(base, randomFn, HAZARD_SAFE_DISTANCE)].filter(Boolean);
   return base;
 }
 
 export function setDirection(state, direction) {
-  const opposites = {
-    up: "down",
-    down: "up",
-    left: "right",
-    right: "left",
-  };
-
   if (!DIRECTIONS[direction]) {
     return state;
   }
 
-  if (opposites[state.direction] === direction) {
+  const queue = state.turnQueue || [];
+  // Check against the last turn already queued, not the direction the snake is
+  // moving now, so "up then left" pressed inside one tick both count.
+  const lastPlanned = queue.length ? queue[queue.length - 1] : state.direction;
+
+  if (direction === lastPlanned || OPPOSITES[lastPlanned] === direction) {
+    return state;
+  }
+
+  if (queue.length >= MAX_QUEUED_TURNS) {
     return state;
   }
 
   return {
     ...state,
+    turnQueue: [...queue, direction],
     pendingDirection: direction,
   };
 }
@@ -88,12 +115,18 @@ export function stepSnake(state, randomFn = Math.random) {
     return state;
   }
 
+  const queue = state.turnQueue || [];
+  const direction = queue.length ? queue[0] : state.pendingDirection || state.direction;
+  const restQueue = queue.slice(1);
+
   const next = {
     ...state,
     snake: state.snake.map((part) => ({ ...part })),
     hazards: state.hazards.map((hazard) => ({ ...hazard })),
     boosts: state.boosts.map((boost) => ({ ...boost })),
-    direction: state.pendingDirection,
+    direction,
+    turnQueue: restQueue,
+    pendingDirection: restQueue.length ? restQueue[restQueue.length - 1] : direction,
     steps: state.steps + 1,
   };
 
@@ -112,8 +145,11 @@ export function stepSnake(state, randomFn = Math.random) {
     return next;
   }
 
-  const hitBody = next.snake.some((part) => samePoint(part, newHead));
-  if (hitBody) {
+  const ateFood = next.food !== null && samePoint(newHead, next.food);
+  // The tail moves out of its cell on this same step unless the snake grows,
+  // so following your own tail is a legal move.
+  const body = ateFood ? next.snake : next.snake.slice(0, -1);
+  if (body.some((part) => samePoint(part, newHead))) {
     next.alive = false;
     return next;
   }
@@ -124,26 +160,34 @@ export function stepSnake(state, randomFn = Math.random) {
   }
 
   next.snake.unshift(newHead);
-
-  let ateFood = false;
-  if (samePoint(newHead, next.food)) {
-    ateFood = true;
-    next.score += 12 + next.level * 2;
-    next.food = randomFreeCell(next, randomFn);
-
-    if (next.score % 36 === 0) {
-      next.level += 1;
-      next.tickMs = Math.max(85, next.tickMs - 12);
-      next.hazards.push(randomFreeCell(next, randomFn));
-    }
-
-    if (next.score % 48 === 0) {
-      next.boosts.push(randomFreeCell(next, randomFn));
-    }
-  }
-
   if (!ateFood) {
     next.snake.pop();
+  }
+
+  if (ateFood) {
+    next.foodsEaten += 1;
+    next.score += 12 + next.level * 2;
+    next.food = null;
+
+    if (next.foodsEaten % FOODS_PER_LEVEL === 0) {
+      next.level += 1;
+      next.tickMs = Math.max(85, next.tickMs - 12);
+      const hazard = randomFreeCell(next, randomFn, HAZARD_SAFE_DISTANCE);
+      if (hazard) next.hazards.push(hazard);
+    }
+
+    if (next.foodsEaten % FOODS_PER_BOOST === 0) {
+      const boost = randomFreeCell(next, randomFn);
+      if (boost) next.boosts.push(boost);
+    }
+
+    next.food = randomFreeCell(next, randomFn);
+    if (next.food === null) {
+      // Every cell is snake or hazard: the board is cleared.
+      next.won = true;
+      next.alive = false;
+      return next;
+    }
   }
 
   const boostIndex = next.boosts.findIndex((boost) => samePoint(boost, newHead));
