@@ -8,7 +8,11 @@ Snake Arena Remix modernizes snake gameplay with hazard cells, temporary speed b
 - Hazard and boost entities
 - Food scoring and level progression
 - Dynamic speed adjustments based on level/boosts
-- Pause/resume flow and restart overlay
+- Pause/resume flow and restart overlay; pauses itself when the tab is hidden
+- Swipe on the board to steer on a phone, Space to start or pause
+- Fast turns are queued (two deep), so a quick U-turn never drops a key
+- Following your own tail is legal, as in the original game
+- Best score kept between visits
 - Unit-tested snake engine
 - Static Vercel-ready deployment setup
 

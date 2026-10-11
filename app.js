@@ -12,7 +12,30 @@ const elements = {
   length: document.getElementById("length"),
   level: document.getElementById("level"),
   boost: document.getElementById("boost"),
+  best: document.getElementById("best"),
+  overlayTitle: document.getElementById("overlayTitle"),
+  overlayNote: document.getElementById("overlayNote"),
 };
+
+const BEST_KEY = "snake-arena-best";
+// A finger has to travel this far (CSS px) before it counts as a swipe.
+const SWIPE_MIN_PX = 24;
+
+function readBest() {
+  try {
+    return Number(localStorage.getItem(BEST_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveBest(score) {
+  try {
+    localStorage.setItem(BEST_KEY, String(score));
+  } catch {
+    // Storage blocked: the best score just lasts for this visit.
+  }
+}
 
 const context = elements.canvas.getContext("2d");
 
@@ -22,6 +45,7 @@ const appState = {
   paused: false,
   lastFrameAt: 0,
   accumulator: 0,
+  best: readBest(),
 };
 
 function setOverlayVisible(visible) {
@@ -47,6 +71,7 @@ function syncStats() {
   elements.length.textContent = String(appState.game.snake.length);
   elements.level.textContent = String(appState.game.level);
   elements.boost.textContent = appState.game.boostStepsLeft > 0 ? `${appState.game.boostStepsLeft} ticks` : "none";
+  elements.best.textContent = String(appState.best);
 }
 
 function draw() {
@@ -108,10 +133,32 @@ function startGame() {
   setOverlayVisible(false);
 }
 
-function togglePause() {
+function setPaused(paused) {
   if (!appState.running) return;
-  appState.paused = !appState.paused;
-  elements.pauseBtn.textContent = appState.paused ? "Resume" : "Pause";
+  appState.paused = paused;
+  // Drop time banked before the pause so the snake does not jump on resume.
+  appState.accumulator = 0;
+  elements.pauseBtn.textContent = paused ? "Resume" : "Pause";
+}
+
+function togglePause() {
+  setPaused(!appState.paused);
+}
+
+function endGame() {
+  appState.running = false;
+  elements.startBtn.disabled = false;
+  elements.pauseBtn.disabled = true;
+  const score = appState.game.score;
+  const newBest = score > appState.best;
+  if (newBest) {
+    appState.best = score;
+    saveBest(score);
+  }
+  elements.overlayTitle.textContent = appState.game.won ? "Board cleared" : "Game over";
+  elements.overlayNote.textContent = newBest ? `New best: ${score}` : `Score ${score}. Best ${appState.best}.`;
+  setOverlayVisible(true);
+  elements.restartBtn.focus();
 }
 
 function animate(timestamp) {
@@ -132,10 +179,7 @@ function animate(timestamp) {
     }
 
     if (!appState.game.alive) {
-      appState.running = false;
-      elements.startBtn.disabled = false;
-      elements.pauseBtn.disabled = true;
-      setOverlayVisible(true);
+      endGame();
     }
   }
 
@@ -147,13 +191,69 @@ elements.startBtn.addEventListener("click", startGame);
 elements.pauseBtn.addEventListener("click", togglePause);
 elements.restartBtn.addEventListener("click", resetGame);
 
+const KEY_DIRECTIONS = {
+  arrowup: "up",
+  w: "up",
+  arrowdown: "down",
+  s: "down",
+  arrowleft: "left",
+  a: "left",
+  arrowright: "right",
+  d: "right",
+};
+
+function steer(direction) {
+  if (!appState.running && appState.game.alive) {
+    startGame();
+  }
+  appState.game = setDirection(appState.game, direction);
+}
+
 document.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
-  if (key === "arrowup" || key === "w") appState.game = setDirection(appState.game, "up");
-  if (key === "arrowdown" || key === "s") appState.game = setDirection(appState.game, "down");
-  if (key === "arrowleft" || key === "a") appState.game = setDirection(appState.game, "left");
-  if (key === "arrowright" || key === "d") appState.game = setDirection(appState.game, "right");
+  const direction = KEY_DIRECTIONS[key];
+  if (direction) {
+    event.preventDefault();
+    steer(direction);
+    return;
+  }
+  if (key === " " || key === "p") {
+    if (event.target instanceof HTMLButtonElement && key === " ") return;
+    event.preventDefault();
+    if (appState.running) togglePause();
+    else startGame();
+  }
 });
+
+// Swipe on the board to steer on a phone. touch-action: none on the canvas
+// stops the page from scrolling under the finger.
+let swipeStart = null;
+elements.canvas.addEventListener("pointerdown", (event) => {
+  swipeStart = { x: event.clientX, y: event.clientY };
+  elements.canvas.setPointerCapture(event.pointerId);
+});
+elements.canvas.addEventListener("pointermove", (event) => {
+  if (!swipeStart) return;
+  const dx = event.clientX - swipeStart.x;
+  const dy = event.clientY - swipeStart.y;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_MIN_PX) return;
+  if (Math.abs(dx) > Math.abs(dy)) steer(dx > 0 ? "right" : "left");
+  else steer(dy > 0 ? "down" : "up");
+  // Start a new swipe from here so one long drag can make two turns.
+  swipeStart = { x: event.clientX, y: event.clientY };
+});
+const endSwipe = () => {
+  swipeStart = null;
+};
+elements.canvas.addEventListener("pointerup", endSwipe);
+elements.canvas.addEventListener("pointercancel", endSwipe);
+
+// Pause when the tab is hidden or the window loses focus, so a notification
+// or a tab switch does not cost the run.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) setPaused(true);
+});
+window.addEventListener("blur", () => setPaused(true));
 
 resetGame();
 requestAnimationFrame(animate);

@@ -24,7 +24,8 @@
         <div class="board-wrap">
           <canvas id="board" width="720" height="480" aria-label="snake arena"></canvas>
           <div id="overlay" class="overlay" hidden>
-            <h2>Game Over</h2>
+            <h2 id="overlayTitle">Game over</h2>
+            <p id="overlayNote"></p>
             <button id="restartBtn" type="button">Restart</button>
           </div>
         </div>
@@ -38,9 +39,10 @@
             <p>Length <strong id="length">3</strong></p>
             <p>Level <strong id="level">1</strong></p>
             <p>Boost <strong id="boost">none</strong></p>
+            <p>Best <strong id="best">0</strong></p>
           </div>
 
-          <p class="meta">Controls: <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> or arrow keys.</p>
+          <p class="meta">Steer with <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> or the arrow keys, or swipe on the board. <kbd>Space</kbd> pauses.</p>
         </aside>
       </section>
     </main>

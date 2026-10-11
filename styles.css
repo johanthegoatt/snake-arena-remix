@@ -58,6 +58,17 @@ header h1 {
   display: block;
   width: min(72vw, 720px);
   height: auto;
+  touch-action: none;
+}
+
+@media (max-width: 760px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  #board {
+    width: 100%;
+  }
 }
 
 .overlay {
