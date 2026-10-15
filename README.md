@@ -4,7 +4,7 @@
 Snake Arena Remix modernizes snake gameplay with hazard cells, temporary speed boosts, and progression-based pacing.
 
 ## Features
-- Grid-based snake core loop
+- Grid-based snake core loop, drawn sharp on high-density screens with the snake gliding between cells and bursts when it eats, levels up or crashes
 - Hazard and boost entities
 - Food scoring and level progression
 - Dynamic speed adjustments based on level/boosts

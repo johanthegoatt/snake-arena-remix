@@ -54,6 +54,7 @@ function setOverlayVisible(visible) {
 
 function resetGame() {
   appState.game = createInitialState();
+  appState.previous = null;
   appState.running = false;
   appState.paused = false;
   appState.lastFrameAt = 0;
@@ -74,47 +75,133 @@ function syncStats() {
   elements.best.textContent = String(appState.best);
 }
 
-function draw() {
+// The canvas backing store follows the device pixel ratio so cells stay
+// sharp on phones and retina screens; drawing still happens in CSS pixels.
+function fitCanvas() {
   const game = appState.game;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const w = game.width * CELL;
+  const h = game.height * CELL;
+  if (elements.canvas.width !== Math.round(w * dpr)) {
+    elements.canvas.width = Math.round(w * dpr);
+    elements.canvas.height = Math.round(h * dpr);
+  }
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+const sparks = [];
+
+function burst(cell, colour, count = 14) {
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  for (let i = 0; i < (reduce ? 0 : count); i += 1) {
+    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
+    const speed = 0.06 + Math.random() * 0.12;
+    sparks.push({
+      x: cell.x * CELL + CELL / 2,
+      y: cell.y * CELL + CELL / 2,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 1,
+      colour,
+    });
+  }
+}
+
+function roundRect(x, y, w, h, r) {
+  context.beginPath();
+  context.roundRect(x, y, w, h, r);
+  context.fill();
+}
+
+// Between two steps each segment slides from where it was to where it is,
+// so movement reads as smooth instead of hopping a cell per tick.
+function segmentAt(i, t) {
+  const now = appState.game.snake[i];
+  const before = appState.previous?.[i] ?? appState.previous?.[appState.previous.length - 1] ?? now;
+  if (Math.abs(before.x - now.x) + Math.abs(before.y - now.y) !== 1) return now;
+  return { x: before.x + (now.x - before.x) * t, y: before.y + (now.y - before.y) * t };
+}
+
+function draw(dt = 0) {
+  const game = appState.game;
+  fitCanvas();
+  const W = game.width * CELL;
+  const H = game.height * CELL;
 
   context.fillStyle = "#102139";
-  context.fillRect(0, 0, elements.canvas.width, elements.canvas.height);
+  context.fillRect(0, 0, W, H);
 
   context.strokeStyle = "rgba(255,255,255,0.08)";
+  context.lineWidth = 1;
+  context.beginPath();
   for (let x = 0; x <= game.width; x += 1) {
-    context.beginPath();
-    context.moveTo(x * CELL, 0);
-    context.lineTo(x * CELL, game.height * CELL);
-    context.stroke();
+    context.moveTo(x * CELL + 0.5, 0);
+    context.lineTo(x * CELL + 0.5, H);
   }
-
   for (let y = 0; y <= game.height; y += 1) {
-    context.beginPath();
-    context.moveTo(0, y * CELL);
-    context.lineTo(game.width * CELL, y * CELL);
-    context.stroke();
+    context.moveTo(0, y * CELL + 0.5);
+    context.lineTo(W, y * CELL + 0.5);
   }
+  context.stroke();
 
-  context.fillStyle = "#ff8f6b";
-  context.fillRect(game.food.x * CELL + 3, game.food.y * CELL + 3, CELL - 6, CELL - 6);
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 220);
+  if (game.food) {
+    context.fillStyle = "#ff8f6b";
+    context.shadowColor = "#ff8f6b";
+    context.shadowBlur = 8 + pulse * 10;
+    roundRect(game.food.x * CELL + 4, game.food.y * CELL + 4, CELL - 8, CELL - 8, 7);
+    context.shadowBlur = 0;
+  }
 
   context.fillStyle = "#ff4b6b";
   for (const hazard of game.hazards) {
-    context.fillRect(hazard.x * CELL + 6, hazard.y * CELL + 6, CELL - 12, CELL - 12);
+    roundRect(hazard.x * CELL + 6, hazard.y * CELL + 6, CELL - 12, CELL - 12, 3);
   }
 
   context.fillStyle = "#4de0ff";
   for (const boost of game.boosts) {
     context.beginPath();
-    context.arc(boost.x * CELL + CELL / 2, boost.y * CELL + CELL / 2, CELL / 3.2, 0, Math.PI * 2);
+    context.arc(boost.x * CELL + CELL / 2, boost.y * CELL + CELL / 2, CELL / 3.6 + pulse * 2, 0, Math.PI * 2);
     context.fill();
   }
 
+  const stepEvery = effectiveTickMs(game);
+  const t = appState.running && !appState.paused && game.alive ? Math.min(1, appState.accumulator / stepEvery) : 1;
+  const boosted = game.boostStepsLeft > 0;
   for (let i = game.snake.length - 1; i >= 0; i -= 1) {
-    const part = game.snake[i];
-    context.fillStyle = i === 0 ? "#6eff8f" : "#36c96a";
-    context.fillRect(part.x * CELL + 2, part.y * CELL + 2, CELL - 4, CELL - 4);
+    const p = segmentAt(i, t);
+    const shade = 1 - (i / Math.max(1, game.snake.length)) * 0.35;
+    context.fillStyle = i === 0 ? (boosted ? "#b6fbff" : "#6eff8f") : `rgba(54, 201, 106, ${shade})`;
+    roundRect(p.x * CELL + 2, p.y * CELL + 2, CELL - 4, CELL - 4, i === 0 ? 9 : 6);
   }
+
+  if (game.snake.length) {
+    const head = segmentAt(0, t);
+    const v = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[game.direction];
+    context.fillStyle = "#0b1426";
+    for (const side of [-1, 1]) {
+      const ex = head.x * CELL + CELL / 2 + v[0] * 6 + v[1] * side * 6;
+      const ey = head.y * CELL + CELL / 2 + v[1] * 6 - v[0] * side * 6;
+      context.beginPath();
+      context.arc(ex, ey, 2.6, 0, Math.PI * 2);
+      context.fill();
+    }
+  }
+
+  for (let i = sparks.length - 1; i >= 0; i -= 1) {
+    const spark = sparks[i];
+    spark.x += spark.vx * dt;
+    spark.y += spark.vy * dt;
+    spark.life -= dt / 450;
+    if (spark.life <= 0) {
+      sparks.splice(i, 1);
+      continue;
+    }
+    context.globalAlpha = spark.life;
+    context.fillStyle = spark.colour;
+    context.fillRect(spark.x - 2, spark.y - 2, 4, 4);
+  }
+  context.globalAlpha = 1;
 
   syncStats();
 }
@@ -122,6 +209,7 @@ function draw() {
 function startGame() {
   if (!appState.game.alive) {
     appState.game = createInitialState();
+    appState.previous = null;
   }
 
   appState.running = true;
@@ -175,7 +263,10 @@ function animate(timestamp) {
 
     while (appState.accumulator >= stepEvery) {
       appState.accumulator -= stepEvery;
-      appState.game = stepSnake(appState.game);
+      const before = appState.game;
+      appState.previous = before.snake;
+      appState.game = stepSnake(before);
+      react(before, appState.game);
     }
 
     if (!appState.game.alive) {
@@ -183,8 +274,16 @@ function animate(timestamp) {
     }
   }
 
-  draw();
+  draw(dt);
   requestAnimationFrame(animate);
+}
+
+// What happened on one step, for effects.
+function react(before, after) {
+  if (after.foodsEaten > before.foodsEaten && before.food) burst(before.food, "#ff8f6b");
+  if (after.level > before.level) burst(after.snake[0], "#ffe27a", 24);
+  if (after.boostStepsLeft > before.boostStepsLeft) burst(after.snake[0], "#4de0ff", 18);
+  if (!after.alive && !after.won) burst(after.snake[0], "#ff4b6b", 30);
 }
 
 elements.startBtn.addEventListener("click", startGame);
