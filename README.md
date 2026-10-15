@@ -13,6 +13,7 @@ Snake Arena Remix modernizes snake gameplay with hazard cells, temporary speed b
 - Fast turns are queued (two deep), so a quick U-turn never drops a key
 - Following your own tail is legal, as in the original game
 - Best score kept between visits
+- Synthesised sounds: a rising note per food through each level, a chord on level up, a whoosh for boosts, a crash; `M` or the button mutes, remembered
 - Unit-tested snake engine
 - Static Vercel-ready deployment setup
 

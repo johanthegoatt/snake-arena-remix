@@ -1,4 +1,7 @@
 import { createInitialState, setDirection, stepSnake, effectiveTickMs } from "./src/snakeEngine.js";
+import { createSound } from "./src/sound.js";
+
+const sound = createSound();
 
 const CELL = 30;
 
@@ -13,6 +16,7 @@ const elements = {
   level: document.getElementById("level"),
   boost: document.getElementById("boost"),
   best: document.getElementById("best"),
+  muteBtn: document.getElementById("muteBtn"),
   overlayTitle: document.getElementById("overlayTitle"),
   overlayNote: document.getElementById("overlayNote"),
 };
@@ -207,6 +211,7 @@ function draw(dt = 0) {
 }
 
 function startGame() {
+  sound.unlock();
   if (!appState.game.alive) {
     appState.game = createInitialState();
     appState.previous = null;
@@ -280,10 +285,23 @@ function animate(timestamp) {
 
 // What happened on one step, for effects.
 function react(before, after) {
-  if (after.foodsEaten > before.foodsEaten && before.food) burst(before.food, "#ff8f6b");
-  if (after.level > before.level) burst(after.snake[0], "#ffe27a", 24);
-  if (after.boostStepsLeft > before.boostStepsLeft) burst(after.snake[0], "#4de0ff", 18);
-  if (!after.alive && !after.won) burst(after.snake[0], "#ff4b6b", 30);
+  if (after.foodsEaten > before.foodsEaten && before.food) {
+    burst(before.food, "#ff8f6b");
+    if (after.level === before.level) sound.eat(after.foodsEaten);
+  }
+  if (after.level > before.level) {
+    burst(after.snake[0], "#ffe27a", 24);
+    sound.levelUp();
+  }
+  if (after.boostStepsLeft > before.boostStepsLeft) {
+    burst(after.snake[0], "#4de0ff", 18);
+    sound.boost();
+  }
+  if (after.won) sound.win();
+  else if (!after.alive) {
+    burst(after.snake[0], "#ff4b6b", 30);
+    sound.crash();
+  }
 }
 
 elements.startBtn.addEventListener("click", startGame);
@@ -314,6 +332,10 @@ document.addEventListener("keydown", (event) => {
   if (direction) {
     event.preventDefault();
     steer(direction);
+    return;
+  }
+  if (key === "m") {
+    toggleMute();
     return;
   }
   if (key === " " || key === "p") {
@@ -353,6 +375,17 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) setPaused(true);
 });
 window.addEventListener("blur", () => setPaused(true));
+
+function syncMute() {
+  elements.muteBtn.textContent = sound.muted ? "Sound off" : "Sound on";
+  elements.muteBtn.setAttribute("aria-pressed", String(sound.muted));
+}
+function toggleMute() {
+  sound.toggle();
+  syncMute();
+}
+elements.muteBtn.addEventListener("click", toggleMute);
+syncMute();
 
 resetGame();
 requestAnimationFrame(animate);
